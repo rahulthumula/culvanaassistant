@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Culvana Assistant</title>
+  <link href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap" rel="stylesheet">
+  <style>
+    /* Basic Reset */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: #f0f2f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    /* Chat Container */
+    .chat-container {
+      background: #ffffff;
+      width: 400px;
+      max-width: 100%;
+      height: 80vh;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .chat-header {
+      background: #6e8efb;
+      color: #fff;
+      padding: 15px;
+      font-size: 1.25em;
+      text-align: center;
+    }
+    .chat-messages {
+      flex: 1;
+      padding: 15px;
+      overflow-y: auto;
+      background: #f9f9f9;
+    }
+    .message {
+      margin-bottom: 15px;
+      max-width: 75%;
+      padding: 10px 15px;
+      border-radius: 15px;
+      position: relative;
+      word-wrap: break-word;
+    }
+    .message.user {
+      background: #6e8efb;
+      color: #fff;
+      margin-left: auto;
+      border-bottom-right-radius: 0;
+    }
+    .message.bot {
+      background: #e5e7eb;
+      color: #333;
+      margin-right: auto;
+      border-bottom-left-radius: 0;
+    }
+    .message .timestamp {
+      font-size: 0.75em;
+      opacity: 0.7;
+      position: absolute;
+      bottom: -18px;
+      right: 10px;
+    }
+    .chat-input {
+      display: flex;
+      padding: 10px;
+      background: #f0f2f5;
+      align-items: center;
+    }
+    .chat-input input[type="text"] {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 20px;
+      outline: none;
+      font-size: 1em;
+    }
+    .chat-input button {
+      margin-left: 10px;
+      background: #6e8efb;
+      border: none;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 1em;
+      transition: background 0.3s ease;
+    }
+    .chat-input button:hover {
+      background: #5a78d1;
+    }
+    .upload-section {
+      display: flex;
+      padding: 10px;
+      background: #fff;
+      border-top: 1px solid #e5e7eb;
+      align-items: center;
+    }
+    .upload-section input[type="file"] { flex: 1; }
+    .upload-section button {
+      margin-left: 10px;
+      background: #6e8efb;
+      border: none;
+      color: #fff;
+      padding: 10px 15px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 1em;
+      transition: background 0.3s ease;
+    }
+    .upload-section button:hover { background: #5a78d1; }
+  </style>
+</head>
+<body>
+  <div class="chat-container">
+    <div class="chat-header">Culvana Assistant</div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="upload-section">
+      <input type="file" id="file-input" />
+      <button id="upload-button">Upload File</button>
+    </div>
+    <div class="chat-input">
+      <input type="text" id="user-input" placeholder="Type a message..." />
+      <button id="send-button">Send</button>
+    </div>
+  </div>
+  
+  <!-- Vapi Integration Script for Voice Commands -->
+  <script>
+    var vapiInstance = null;
+    const assistant = "9f1fc06e-9d8d-4242-b5a8-23fb4bbb5c69"; // Your assistant ID
+    const apiKey = "01734364-b8b9-480a-b29e-9065fd51ba33"; // Your Public key from Vapi Dashboard
+    const buttonConfig = {
+      position: "bottom-right",
+      offset: "40px",
+      width: "60px",
+      height: "60px",
+      idle: {
+        color: "rgb(93, 254, 202)",
+        type: "round",
+        icon: "https://unpkg.com/lucide-static@0.321.0/icons/phone.svg",
+      },
+      loading: {
+        color: "rgb(93, 124, 202)",
+        type: "round",
+        icon: "https://unpkg.com/lucide-static@0.321.0/icons/loader-2.svg",
+      },
+      active: {
+        color: "rgb(255, 0, 0)",
+        type: "round",
+        icon: "https://unpkg.com/lucide-static@0.321.0/icons/phone-off.svg",
+      },
+    };
+    (function (d, t) {
+      var g = d.createElement(t),
+          s = d.getElementsByTagName(t)[0];
+      g.src = "https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js";
+      g.defer = true;
+      g.async = true;
+      g.onload = function () {
+        vapiInstance = window.vapiSDK.run({
+          apiKey: apiKey,
+          assistant: assistant,
+          config: buttonConfig,
+        });
+        vapiInstance.on("speech-start", () => { addMessage("bot", "Listening..."); });
+        vapiInstance.on("speech-end", () => { console.log("Speech has ended"); });
+        vapiInstance.on("call-start", () => { addMessage("bot", "Voice assistant connected! How can I assist you?"); });
+        vapiInstance.on("call-end", () => { addMessage("bot", "Call ended. Thank you!"); });
+        vapiInstance.on("volume-level", (volume) => { console.log(`Assistant volume level: ${volume}`); });
+        vapiInstance.on("message", (message) => {
+          if (message.type === "transcript" && message.transcriptType === "final") {
+            addMessage("user", message.transcript);
+          } else if (message.type === "response") {
+            addMessage("bot", message.text);
+          }
+        });
+        vapiInstance.on("error", (error) => {
+          console.error("Error during call:", error);
+          addMessage("error", "An error occurred during the call.");
+        });
+      };
+      s.parentNode.insertBefore(g, s);
+    })(document, "script");
+    
+    // WebSocket Chat Logic
+    const chatMessages = document.getElementById("chat-messages");
+    let websocket;
+    
+    function getWebSocketUrl() {
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      const host = window.location.host;
+      return `${protocol}://${host}/chat`;
+    }
+    
+    function initWebSocket() {
+      websocket = new WebSocket(getWebSocketUrl());
+      
+      websocket.onopen = () => { console.log("WebSocket connected"); };
+      
+      websocket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        addMessage("error", "WebSocket error. Please try again later.");
+      };
+      
+      websocket.onclose = () => {
+        console.log("WebSocket closed, reconnecting...");
+        addMessage("error", "WebSocket disconnected. Reconnecting...");
+        setTimeout(initWebSocket, 3000);
+      };
+      
+      websocket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "text") {
+          addMessage("bot", data.message);
+        } else if (data.type === "audio") {
+          addMessage("bot", data.message);
+          if (data.audio) {
+            const audio = new Audio("data:audio/mp3;base64," + data.audio);
+            audio.play().catch((err) => {
+              console.error("Audio playback error:", err);
+              addMessage("error", "Audio playback failed.");
+            });
+          }
+        } else if (data.type === "error") {
+          addMessage("error", data.message);
+        }
+      };
+    }
+    
+    function addMessage(sender, message) {
+      const messageElem = document.createElement("div");
+      messageElem.classList.add("message", sender);
+      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      messageElem.innerHTML = `${message} <span class="timestamp">${timestamp}</span>`;
+      chatMessages.appendChild(messageElem);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    document.getElementById("send-button").addEventListener("click", sendMessage);
+    document.getElementById("user-input").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+    
+    function sendMessage() {
+      const input = document.getElementById("user-input");
+      const message = input.value.trim();
+      if (message === "") return;
+      addMessage("user", message);
+      if (websocket && websocket.readyState === WebSocket.OPEN) {
+        websocket.send(JSON.stringify({ type: "text", message }));
+      } else {
+        addMessage("error", "WebSocket not connected.");
+      }
+      input.value = "";
+    }
+    
+    document.getElementById("upload-button").addEventListener("click", uploadFile);
+    
+    function uploadFile() {
+      const fileInput = document.getElementById("file-input");
+      if (fileInput.files.length === 0) {
+        alert("Please select a file to upload.");
+        return;
+      }
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      fetch("/upload_file/", {
+        method: "POST",
+        body: formData,
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === "success") {
+          addMessage("bot", "File uploaded successfully. You can now ask questions about it.");
+        } else {
+          addMessage("error", "File upload error: " + data.detail);
+        }
+      })
+      .catch(err => {
+        console.error("File upload error:", err);
+        addMessage("error", "File upload failed. Please try again.");
+      });
+    }
+    
+    initWebSocket();
+  </script>
+</body>
+</html>

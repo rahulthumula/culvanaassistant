@@ -1,0 +1,4 @@
+{
+    "appService.defaultWebAppToDeploy": "/subscriptions/d0c5609a-cb06-4633-aef5-0c5b68df21bf/resourceGroups/appsvc_linux_centralus_premium/providers/Microsoft.Web/sites/culvanaassistant",
+    "appService.deploySubpath": "."
+}
