@@ -537,8 +537,8 @@
 
   <!-- Vapi Integration Script for Voice Commands -->
   <script>
-    // Chat object to store chat history and settings
-    const chatStorage = {
+
+      const chatStorage = {
       chats: [],
       currentChatId: null,
       
@@ -623,30 +623,75 @@
         this.renderChatsList();
       },
       
-      addMessageToChat(sender, content) {
-        const chat = this.chats.find(chat => chat.id === this.currentChatId);
-        if (!chat) return;
-        
-        const timestamp = new Date().toISOString();
-        
-        chat.messages.push({
-          sender,
-          content,
-          timestamp
+  // Modify the addMessageToChat method in the chatStorage object
+// Replace the existing method with this updated version
+
+// 1. Check if backend endpoint is correctly implemented
+// First, let's add console logging to debug the process
+
+// Update the addMessageToChat method with better error handling and logging
+// Replace the existing addMessageToChat method with this fixed version
+addMessageToChat(sender, content) {
+  const chat = this.chats.find(chat => chat.id === this.currentChatId);
+  if (!chat) return;
+  
+  const timestamp = new Date().toISOString();
+  
+  chat.messages.push({
+    sender,
+    content,
+    timestamp
+  });
+  
+  // If this is the first user message and the chat has the default name,
+  // generate a concise name using OpenAI
+  if (chat.name === 'New Conversation' && sender === 'user' && 
+      chat.messages.filter(m => m.sender === 'user').length === 1) {
+    
+    // Set a temporary name while waiting for the API
+    document.getElementById('chat-title').value = "Generating name...";
+    
+    // Use fetch with async/await
+    (async () => {
+      try {
+        const response = await fetch('/generate_chat_name/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ content }),
         });
         
-        // Update the chat name if it's the default name and this is the first user message
-        if (chat.name === 'New Conversation' && sender === 'user' && chat.messages.filter(m => m.sender === 'user').length === 1) {
-          chat.name = content.length > 30 ? content.substring(0, 27) + '...' : content;
-          document.getElementById('chat-title').value = chat.name;
+        if (!response.ok) {
+          throw new Error(`API returned ${response.status}`);
         }
         
+        const data = await response.json();
+        
+        if (data && data.name) {
+          chat.name = data.name;
+          document.getElementById('chat-title').value = chat.name;
+          this.saveToLocalStorage();
+          this.renderChatsList();
+        } else {
+          throw new Error("Missing name in response");
+        }
+      } catch (error) {
+        console.error('Error generating chat name:', error);
+        // Fallback to the old behavior
+        chat.name = "lol";
+        document.getElementById('chat-title').value = chat.name;
         this.saveToLocalStorage();
         this.renderChatsList();
-        
-        return timestamp;
-      },
-      
+      }
+    })();
+  }
+  
+  // Always save to localStorage
+  this.saveToLocalStorage();
+  
+  return timestamp;
+},
       renderChatsList() {
         const chatsList = document.getElementById('chats-list');
         chatsList.innerHTML = '';
@@ -829,21 +874,26 @@
     }
     
     function sendMessage() {
-      const input = document.getElementById('user-input');
-      const message = input.value.trim();
-      if (message === '') return;
-      
-      addMessage('user', message);
-      
-      if (websocket && websocket.readyState === WebSocket.OPEN) {
-        websocket.send(JSON.stringify({ type: 'text', message }));
-      } else {
-        addMessage('error', 'WebSocket not connected.');
-      }
-      
-      input.value = '';
-    }
-    
+  const input = document.getElementById('user-input');
+  const message = input.value.trim();
+  if (message === '') return;
+  
+  // Add to UI
+  addMessageToUI('user', message);
+  
+  // Add to chat storage (this will trigger the name generation)
+  chatStorage.addMessageToChat('user', message);
+  
+  // Send via WebSocket
+  if (websocket && websocket.readyState === WebSocket.OPEN) {
+    websocket.send(JSON.stringify({ type: 'text', message }));
+  } else {
+    addMessage('error', 'WebSocket not connected. Please refresh the page.');
+  }
+  
+  // Clear input
+  input.value = '';
+}
     function uploadFile() {
       const fileInput = document.getElementById('file-input');
       if (fileInput.files.length === 0) {
@@ -880,7 +930,12 @@
     // Event Listeners
     document.addEventListener('DOMContentLoaded', function() {
       // Initialize chat storage
-      chatStorage.init();
+      try {
+    chatStorage.init();
+    console.log("Chat storage initialized successfully");
+  } catch (error) {
+    console.error("Error initializing chat storage:", error);
+  }
       
       // Initialize WebSocket
       initWebSocket();
