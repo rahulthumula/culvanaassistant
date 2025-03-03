@@ -12,12 +12,16 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 from dotenv import load_dotenv
 from openai import OpenAI
+from fastapi import Request
 
 # For file extraction:
 import PyPDF2
 import docx
 from PIL import Image
 import pytesseract
+from fastapi.middleware.cors import CORSMiddleware
+
+
 
 # ----------------------------
 # Logging and Environment Setup
@@ -44,6 +48,14 @@ uploaded_file_content = None
 # ----------------------------
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Update with specific origins if needed
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # ----------------------------
 # Health Check Endpoint
@@ -283,7 +295,67 @@ async def transcribe_audio_endpoint(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Error during transcription: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
 
+# Chat Name Generation Endpoint
+@app.post("/generate_chat_name/")
+async def generate_chat_name(request: Request):
+    try:
+        logger.debug("Received chat name generation request")
+        data = await request.json()
+        user_content = data.get("content", "")
+        
+        logger.debug(f"Content for chat name: {user_content[:50]}...")
+        
+        if not user_content:
+            logger.warning("Empty content received for chat name generation")
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Content is required."}
+            )
+        
+        # Call OpenAI API to generate a concise chat name (1-4 words)
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",  # You can use a smaller model for this task
+                messages=[
+                    {"role": "system", "content": "Generate a concise 1-4 word title that captures the essence of this message. Respond with only the title, nothing else."},
+                    {"role": "user", "content": user_content}
+                ],
+                max_tokens=100,
+                temperature=1,
+                timeout=2
+            )
+            
+            # Extract the chat name from the response
+            chat_name = response.choices[0].message.content.strip()
+            logger.debug(f"Generated chat name: {chat_name}")
+            
+            # Ensure it's not too long
+            if len(chat_name.split()) > 4:
+                words = chat_name.split()[:4]
+                chat_name = " ".join(words)
+                logger.debug(f"Trimmed chat name to: {chat_name}")
+            
+            return {"name": chat_name}
+        
+        except Exception as api_error:
+            logger.error(f"OpenAI API error: {api_error}")
+            # If the API call fails, generate a simple local summary
+            if len(user_content) > 30:
+                simple_name = user_content[:30].strip() + "..."
+            else:
+                simple_name = user_content.strip()
+            
+            logger.debug(f"Using fallback name: {simple_name}")
+            return {"name": simple_name}
+    
+    except Exception as e:
+        logger.error(f"Error generating chat name: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
 # ----------------------------
 # Root Endpoint (Serve index.html)
 # ----------------------------
